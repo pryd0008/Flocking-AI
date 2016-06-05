@@ -2,6 +2,12 @@
 using System.Collections;
 using System.Collections.Generic;
 
+/// <summary>
+/// Flocking AI designed to herd a group from point A to B while avoiding obstacles
+/// Referenced web page only: 
+/// http://gamedevelopment.tutsplus.com/tutorials/the-three-simple-rules-of-flocking-behaviors-alignment-cohesion-and-separation--gamedev-3444
+/// </summary>
+
 public class Agent : MonoBehaviour {
     [SerializeField]
     private float VelocityWeight;
@@ -9,10 +15,13 @@ public class Agent : MonoBehaviour {
     private float CohesionWeight;
     [SerializeField]
     private float SeparationWeight;
+    [SerializeField]
+    private float NavigationWeight;
 
     private uint neighbourCount;
     public Vector3 velocity { get; private set; }
     private List<Agent> neighbours;
+    private List<Transform> walls;
 
 	void Awake () {
         neighbourCount = 0;
@@ -20,13 +29,17 @@ public class Agent : MonoBehaviour {
         neighbours = new List<Agent>();
 	}
 	
+    void Start() {
+        StartCoroutine(update_cr());
+    }
 
-	void Update () {
+	private IEnumerator update_cr () {
         if(neighbourCount != 0) {
             velocity += CalculateVelocity() * VelocityWeight + CalculateCohesion() * CohesionWeight + CalculateSeparation() * SeparationWeight;
         } else {
             velocity = Vector3.up;
         }
+        yield return null;
 	}
 
     #region Triggers
@@ -36,6 +49,10 @@ public class Agent : MonoBehaviour {
         {
             CalculateVelocity(other.GetComponent<Agent>());
         }
+        else if(other.tag == "Wall")
+        {
+            walls.Add(other.transform);
+        }
     }
 
     void OnTriggerExit(Collider other)
@@ -43,6 +60,10 @@ public class Agent : MonoBehaviour {
         if (other.tag == "Agent")
         {
             neighbours.Remove(other.GetComponent<Agent>());
+        }
+        else if(other.tag == "Wall")
+        {
+            walls.Add(other.transform);
         }
     }
     #endregion
@@ -55,9 +76,6 @@ public class Agent : MonoBehaviour {
             foreach (Agent agent in neighbours) {
                 vel += agent.velocity;
             }
-        } else {
-            velocity += other.velocity;
-            neighbours.Add(other);
         }
         return vel;
     }
@@ -69,8 +87,6 @@ public class Agent : MonoBehaviour {
             foreach(Agent agent in neighbours) {
                 vel += agent.transform.position;
             }
-        } else {
-            vel += other.transform.position;
         }
 
         vel /= neighbourCount;
@@ -86,8 +102,6 @@ public class Agent : MonoBehaviour {
             foreach(Agent agent in neighbours) {
                 vel += agent.transform.position - this.transform.position;
             }
-        } else {
-            vel += other.transform.position - this.transform.position;
         }
         
         vel /= neighbourCount;
