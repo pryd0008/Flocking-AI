@@ -11,6 +11,15 @@ using System.Collections.Generic;
 public class Agent : MonoBehaviour
 {
     [SerializeField]
+    private string OrderOfExecution;
+    [SerializeField]
+    private Transform[] Destinations;
+
+    [Space(10)]
+    
+    [SerializeField]
+    private float AlignmentDelay;
+    [SerializeField]
     private float VelocityWeight;
     [SerializeField]
     private float CohesionWeight;
@@ -21,7 +30,9 @@ public class Agent : MonoBehaviour
     [SerializeField]
     private float RoatationSpeed;
 
+    private int destinationIndex;
     private uint neighbourCount;
+    private Vector3 alignmentDirection;
     public Vector3 forwardDirection { get; private set; }
     private Vector3 previousVelocity;
     private List<Agent> neighbours;
@@ -30,8 +41,9 @@ public class Agent : MonoBehaviour
 
     void Awake()
     {
+        destinationIndex = 0;
         neighbourCount = 0;
-        forwardDirection = Vector3.up;
+        alignmentDirection = forwardDirection = Vector3.forward;
         neighbours = new List<Agent>();
         walls = new List<GameObject>();
         wallPositions = new List<Vector3>();
@@ -45,24 +57,40 @@ public class Agent : MonoBehaviour
 
     private IEnumerator update_cr()
     {
+        forwardDirection = Vector3.zero;
+        alignmentDirection = Vector3.zero;
         while (true)
         {
-            previousVelocity = forwardDirection;
+            previousVelocity = this.transform.forward;
             if (neighbourCount != 0)
             {
                 forwardDirection += CalculateVelocity() * VelocityWeight;
                 forwardDirection += CalculateCohesion() * CohesionWeight;
                 forwardDirection += CalculateSeparation() * SeparationWeight;
+                alignmentDirection = Vector3.zero;
+                GetCurrentDestination(ref alignmentDirection);
             }
-            else { forwardDirection += Vector3.up * VelocityWeight; }
+            else
+            {
+                //forwardDirection += (Destinations[0].position - this.transform.position).normalized * 10;
+            }
 
             if (walls.Count > 0)
             {
-                forwardDirection += CalculateCollisionAvoidance() * NavigationWeight;
+                alignmentDirection = Vector3.zero;
+                forwardDirection += CalculateCollisionAvoidance() * NavigationWeight * Time.deltaTime;
+                foreach(Vector3 wall in wallPositions)
+                {
+                    Debug.DrawLine(this.transform.position, wall, Color.green);
+                }
             }
+            else { forwardDirection += (Destinations[0].position - this.transform.position).normalized; }
 
-            this.transform.up = Vector3.Lerp(previousVelocity, forwardDirection, RoatationSpeed);
-            this.transform.position += this.transform.up * VelocityWeight * Time.deltaTime;
+            alignmentDirection.Normalize();
+            forwardDirection.Normalize();
+
+            this.transform.forward = Vector3.Lerp(previousVelocity, forwardDirection + alignmentDirection, RoatationSpeed).normalized;
+            this.transform.position += this.transform.forward * VelocityWeight * Time.deltaTime;
             yield return null;
         }
     }
@@ -81,12 +109,24 @@ public class Agent : MonoBehaviour
             {
                 closestPoint = GetClosestTriangleAndPoint(walls[i]);
                 wallPositions[i] = closestPoint;
-                Debug.Log(closestPoint);
             }
 
             yield return null;
             wallPositions.Clear();
         }
+    }
+
+    private void GetNewDestination()
+    {
+        destinationIndex++;
+        if (destinationIndex >= OrderOfExecution.Split(',').Length) { destinationIndex = 0; }
+    }
+
+    private void GetCurrentDestination(ref Vector3 alignment)
+    {
+        int index = int.Parse(OrderOfExecution.Split(',')[destinationIndex]);
+        Vector3 dir = Destinations[index].position - this.transform.position;
+        alignment += dir;
     }
 
     #region Triggers
@@ -99,6 +139,14 @@ public class Agent : MonoBehaviour
         else if (other.tag == "Wall")
         {
             walls.Add(other.gameObject);
+        }
+        else if (other.tag == "Respawn")
+        {
+            Vector3 pos = new Vector3();
+            pos.x = Random.Range(-10, 10);
+            pos.y = Random.Range(-10, 10);
+            pos.z = 0;
+            this.transform.position = pos;
         }
     }
 
@@ -178,10 +226,11 @@ public class Agent : MonoBehaviour
         
         foreach (Vector3 wall in wallPositions)
         {
-            vel += wall - this.transform.position;
+            Vector3 dir = this.transform.position - wall;
+            vel += dir; // - dir.normalized * WallSkin;
         }
         vel /= walls.Count;
-        vel *= -1;
+        //vel *= -1;
         vel.Normalize();
 
         return vel;
@@ -283,5 +332,5 @@ public class Agent : MonoBehaviour
 }
 
 /* TODO:
- * 1. Replace Separation code for walls with wall detection
+ * 1. Add open list of destinations
  */
